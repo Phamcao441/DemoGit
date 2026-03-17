@@ -1,4 +1,4 @@
-# ocr_tesseract.py - OCR PDF scan tiếng Việt ra Word bằng Tesseract (cấu trúc sạch, HTML riêng)
+# app.py - OCR PDF scan tiếng Việt ra Word bằng Tesseract + Gemini sửa lỗi
 
 import os
 from datetime import datetime
@@ -9,8 +9,9 @@ import pytesseract
 import cv2
 import numpy as np
 from docx import Document
+from google import genai
 
-# Đường dẫn Tesseract exe (thay nếu khác)
+# Đường dẫn Tesseract exe (thay nếu cài ở chỗ khác)
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
 app = Flask(__name__)
@@ -26,15 +27,20 @@ os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 # Đường dẫn Poppler (thay nếu khác)
 POPPLER_PATH = r'D:\poppler\Library\bin'
 
+# Gemini API (google-genai SDK)
+GEMINI_API_KEY = "AIzaSyAcSIg-TwvX_SgB0YjYCulB9NkP5wwUlQ8"  # THAY BẰNG KEY THẬT CỦA EM
+gemini_client = genai.Client(api_key=GEMINI_API_KEY)
+GEMINI_MODEL_NAME = "models/gemini-1.5-pro"  # Có thể đổi thành "gemini-1.5-pro" nếu muốn mạnh hơn
+
 def preprocess_image(img):
     gray = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2GRAY)
-    blurred = cv2.GaussianBlur(gray, (3, 3), 0)
-    _, binary = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    # Adaptive threshold tốt hơn cho scan nhiễu
+    binary = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
     return Image.fromarray(binary)
 
 def pdf_to_text(pdf_path):
     try:
-        images = convert_from_path(pdf_path, dpi=300, poppler_path=POPPLER_PATH)
+        images = convert_from_path(pdf_path, dpi=400, poppler_path=POPPLER_PATH)  # Tăng DPI lên 400 để OCR tốt hơn
     except Exception as e:
         raise Exception(f"Lỗi chuyển PDF sang ảnh: {str(e)}")
 
@@ -46,9 +52,43 @@ def pdf_to_text(pdf_path):
 
     return "\n\n".join(full_text) or "Không nhận dạng được văn bản nào."
 
+def correct_text_with_gemini(raw_text):
+    try:
+        prompt = f"""
+Bạn là chuyên gia sửa lỗi OCR tiếng Việt từ Tesseract. Văn bản gốc thường có lỗi nặng: thiếu dấu thanh (ví dụ 'tuan' thành 'tuần', 'xu ly' thành 'xử lý'), từ ghép bị tách, chữ bị nhận nhầm (ví dụ 'TuzỀ`1n' thành 'Tuần', 'DỄi ưu' thành 'Tối ưu', 'Iịiễm' thành 'Điểm', 'ủn/phấm' thành 'bản/phẩm').
+
+Yêu cầu bắt buộc:
+- Sửa lỗi dấu thanh, nối từ ghép, sửa chính tả chuẩn tiếng Việt.
+- Giữ nguyên ý nghĩa gốc 100%, không thêm/bớt nội dung, không tự ý diễn giải.
+- Giữ nguyên cấu trúc trang: "Trang X:", dấu gạch ngang phân cách.
+- Sửa các lỗi phổ biến: 'i' thành 'ì', 'a' thành 'à', 'u' thành 'ủ', từ ghép như 'thông tin' bị tách thành 'thông' 'tin'.
+- Nếu phần nào sai quá nặng (ký tự lạ, không đoán được), giữ nguyên phần đó thay vì đoán mò.
+- Không thêm giải thích, markdown, code block, chỉ trả về văn bản đã sửa.
+
+Văn bản gốc:
+{raw_text}
+
+Trả về CHỈ văn bản đã sửa.
+"""
+
+        response = gemini_client.models.generate_content(
+            model=GEMINI_MODEL_NAME,
+            contents=prompt
+        )
+
+        corrected = response.text.strip()
+
+        if corrected.startswith("```") and corrected.endswith("```"):
+            corrected = corrected.split("```")[1].strip()
+
+        return corrected
+    except Exception as e:
+        print(f"Gemini lỗi: {e}")
+        return raw_text
+
 def text_to_docx(text_content, output_path):
     doc = Document()
-    doc.add_heading('Kết quả OCR PDF scan (Tesseract)', level=1)
+    doc.add_heading('Kết quả OCR PDF scan (Tesseract + Gemini sửa lỗi)', level=1)
     for part in text_content.split('\n'):
         if not part.strip():
             continue
@@ -82,16 +122,17 @@ def upload_file():
     file.save(pdf_path)
 
     try:
-        extracted_text = pdf_to_text(pdf_path)
+        raw_text = pdf_to_text(pdf_path)
+        corrected_text = correct_text_with_gemini(raw_text)
 
         docx_filename = f"ketqua_{timestamp}.docx"
         docx_path = os.path.join(app.config['OUTPUT_FOLDER'], docx_filename)
-        text_to_docx(extracted_text, docx_path)
+        text_to_docx(corrected_text, docx_path)
 
         return send_file(
             docx_path,
             as_attachment=True,
-            download_name="KetQua_OCR.docx"
+            download_name="KetQua_OCR_Gemini.docx"
         )
 
     except Exception as e:
