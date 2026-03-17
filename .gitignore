@@ -1,0 +1,24 @@
+# Python venv
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Folders tạm
+uploads/
+outputs/
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# Logs & temp
+*.log
+*.tmp
+
+# Editor files
+.vscode/
+.idea/
+*.swp
