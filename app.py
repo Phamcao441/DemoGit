@@ -10,6 +10,17 @@ import cv2
 import numpy as np
 from docx import Document
 from google import genai
+from dotenv import load_dotenv
+
+# Load biến từ file .env (ẩn key an toàn)
+load_dotenv()
+
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+if not GEMINI_API_KEY:
+    raise ValueError("Không tìm thấy GEMINI_API_KEY trong file .env")
+
+gemini_client = genai.Client(api_key=GEMINI_API_KEY)
+GEMINI_MODEL_NAME = "models/gemini-1.5-flash"  # Đổi thành "models/gemini-1.5-pro" nếu muốn chính xác hơn
 
 # Đường dẫn Tesseract exe (thay nếu khác)
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
@@ -27,16 +38,11 @@ os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 # Đường dẫn Poppler (thay nếu khác)
 POPPLER_PATH = r'D:\poppler\Library\bin'
 
-# Gemini API (google-genai SDK)
-GEMINI_API_KEY = "AIzaSyAcSIg-TwvX_SgB0YjYCulB9NkP5wwUlQ8"  # THAY BẰNG KEY THẬT CỦA EM
-gemini_client = genai.Client(api_key=GEMINI_API_KEY)
-GEMINI_MODEL_NAME = "gemini-1.5-flash"  # Đổi thành "gemini-1.5-pro" nếu muốn chính xác hơn
-
 def preprocess_image(img):
     gray = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2GRAY)
-    # Denoise
+    # Denoise nhẹ
     denoised = cv2.fastNlMeansDenoising(gray, h=10)
-    # Adaptive threshold + contrast
+    # Adaptive threshold
     binary = cv2.adaptiveThreshold(denoised, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
     return Image.fromarray(binary)
 
@@ -57,8 +63,8 @@ def pdf_to_text(pdf_path):
 def image_to_text(image_path):
     try:
         img = Image.open(image_path)
-        # Resize 2x để OCR tốt hơn với ảnh nhỏ/mờ
-        img = img.resize((img.width * 2, img.height * 2), Image.LANCZOS)
+        # Resize 1.5x để OCR tốt hơn mà không chậm
+        img = img.resize((int(img.width * 1.5), int(img.height * 1.5)), Image.LANCZOS)
         processed = preprocess_image(img)
         text = pytesseract.image_to_string(processed, lang='vie', config='--psm 6 --oem 3')
         return f"Trang 1 (ảnh đơn):\n{text.strip()}\n{'-' * 60}"
@@ -68,14 +74,14 @@ def image_to_text(image_path):
 def correct_text_with_gemini(raw_text):
     try:
         prompt = f"""
-Bạn là chuyên gia sửa lỗi OCR tiếng Việt từ sách scan cũ. Văn bản gốc rất xấu: chữ nhỏ, thiếu dấu, từ tách, ký tự lạ (ví dụ 'TuzỀ`1n' → 'Tuần', 'DỄi ưu' → 'Tối ưu', 'Iịiễm' → 'Điểm', 'ủn/phấm' → 'bản/phẩm', 'xứ lý' → 'xử lý', 'triên khai' → 'triển khai').
+Bạn là chuyên gia sửa lỗi OCR tiếng Việt từ sách scan cũ. Văn bản gốc rất xấu: thiếu dấu thanh, từ tách, ký tự lạ (ví dụ 'TuzỀ`1n' → 'Tuần', 'DỄi ưu' → 'Tối ưu', 'Iịiễm' → 'Điểm', 'ủn/phấm' → 'bản/phẩm', 'xứ lý' → 'xử lý', 'triên khai' → 'triển khai').
 
 Yêu cầu bắt buộc:
 - Sửa dấu thanh, nối từ ghép, sửa chính tả chuẩn tiếng Việt.
 - Giữ nguyên ý nghĩa gốc 100%, không thêm/bớt nội dung, không tự ý diễn giải.
-- Giữ cấu trúc trang: "Trang X:", dấu gạch ngang phân cách.
-- Sửa lỗi phổ biến sách cũ: 'tuan' → 'tuần', 'xu ly' → 'xử lý', 'lôi' → 'lỗi', 'khăc phục' → 'khắc phục'.
-- Nếu chữ bị nhận nhầm hoàn toàn (ký tự lạ, không đoán được), giữ nguyên phần đó.
+- Giữ cấu trúc: "Trang X:", dấu gạch ngang phân cách.
+- Sửa lỗi phổ biến sách scan: 'tuan' → 'tuần', 'xu ly' → 'xử lý', 'lôi' → 'lỗi', 'khăc phục' → 'khắc phục'.
+- Nếu chữ bị nhận nhầm nặng (ký tự lạ), giữ nguyên phần đó.
 - Không thêm giải thích, markdown, code block, chỉ trả về văn bản đã sửa.
 
 Văn bản gốc:
