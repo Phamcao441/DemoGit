@@ -55,7 +55,7 @@ def pdf_to_text(pdf_path):
     full_text = []
     for page_num, img in enumerate(images, 1):
         processed = preprocess_image(img)
-        text = pytesseract.image_to_string(processed, lang='vie', config='--psm 6 --oem 3')
+        text = pytesseract.image_to_string(processed, lang='vie_custom_final', config='--psm 6 --oem 3')
         full_text.append(f"Trang {page_num}:\n{text.strip()}\n{'-' * 60}")
 
     return "\n\n".join(full_text) or "Không nhận dạng được văn bản nào."
@@ -64,9 +64,9 @@ def image_to_text(image_path):
     try:
         img = Image.open(image_path)
         # Resize 1.5x để OCR tốt hơn mà không chậm
-        img = img.resize((int(img.width * 1.5), int(img.height * 1.5)), Image.LANCZOS)
+        img = img.resize((int(img.width * 2), int(img.height * 2)), Image.LANCZOS)
         processed = preprocess_image(img)
-        text = pytesseract.image_to_string(processed, lang='vie', config='--psm 6 --oem 3')
+        text = pytesseract.image_to_string(processed, lang='vie_custom', config='--psm 6 --oem 3')
         return f"Trang 1 (ảnh đơn):\n{text.strip()}\n{'-' * 60}"
     except Exception as e:
         raise Exception(f"Lỗi OCR ảnh: {str(e)}")
