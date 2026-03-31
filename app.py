@@ -12,9 +12,7 @@ from docx import Document
 from google import genai
 from dotenv import load_dotenv
 
-# =========================
-# GEMINI 3 FLASH PREVIEW - CÚ PHÁP ĐÚNG
-# =========================
+
 
 load_dotenv()
 
@@ -22,7 +20,7 @@ GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 if not GEMINI_API_KEY:
     raise ValueError("Không tìm thấy GEMINI_API_KEY trong file .env")
 
-client = genai.Client()   # Tự lấy API key từ .env
+client = genai.Client()   
 
 # Đường dẫn Tesseract
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
