@@ -3,142 +3,60 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OCR PDF/Ảnh Scan Tiếng Việt → Word</title>
-    <!-- Link file CSS riêng -->
+    <title>Hệ thống OCR & Dublin Core Metadata</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
 </head>
 <body>
     <div class="container">
-        <h1>OCR PDF/Ảnh Scan Tiếng Việt → Word</h1>
-       
+        <header>
+            <h1>📜 Số hóa Tài liệu</h1>
+            <p>Trích xuất nội dung bằng AI & Quản lý theo chuẩn Dublin Core</p>
+        </header>
 
-        <form id="uploadForm" enctype="multipart/form-data">
-            <div class="upload-area" id="dropArea">
-                <p>Kéo thả file hoặc click để chọn</p>
-                <p>Hỗ trợ: PDF, JPG, JPEG, PNG</p>
-                <input type="file" id="fileInput" name="file" accept=".pdf,.jpg,.jpeg,.png">
+        <form action="/upload" method="POST" enctype="multipart/form-data" class="ocr-form">
+            <div class="form-grid">
+                <div class="input-group">
+                    <label>Tiêu đề (dc.title) *</label>
+                    <input type="text" name="title" placeholder="Tên sách hoặc tài liệu..." required>
+                </div>
+
+                <div class="input-group">
+                    <label>Tác giả (dc.creator)</label>
+                    <input type="text" name="creator" placeholder="Tên tác giả, tổ chức...">
+                </div>
+
+                <div class="input-group">
+                    <label>Chủ đề (dc.subject)</label>
+                    <input type="text" name="subject" placeholder="Từ khóa, lĩnh vực...">
+                </div>
+
+                <div class="input-group">
+                    <label>Nhà xuất bản (dc.publisher)</label>
+                    <input type="text" name="publisher" placeholder="Nơi phát hành...">
+                </div>
+
+                <div class="input-group full-width">
+                    <label>Nguồn gốc (dc.source)</label>
+                    <input type="text" name="source" placeholder="Link web hoặc nguồn tài liệu gốc...">
+                </div>
+
+                <div class="input-group full-width">
+                    <label>Chọn tệp tin (PDF, JPG, PNG) *</label>
+                    <div class="file-upload">
+                        <input type="file" name="file" id="file" required>
+                    </div>
+                </div>
             </div>
-            <div id="preview">
-                <!-- Preview sẽ hiển thị ở đây -->
-            </div>
-            <div id="loading">
-                <div class="spinner"></div>
-                Đang xử lý OCR... (có thể mất vài giây đến 1 phút tùy file)
-            </div>
-            <button type="submit">Upload & Xử lý OCR</button>
-            <button type="button" id="resetBtn">Reset</button>
+
+            <button type="submit" class="btn-submit">
+                <span>🚀 Bắt đầu xử lý AI</span>
+            </button>
         </form>
 
-        <div class="info">
-            <strong>Lưu ý:</strong>
-            <ul>
-                <li>File PDF scan (ảnh) sẽ được chuyển sang văn bản editable.</li>
-                <li>Gemini tự động sửa lỗi OCR phổ biến (dấu thanh, từ tách, ký tự lạ).</li>
-                
-            </ul>
-        </div>
+        <footer>
+            <p>&copy; 2026 - Hệ thống OCR thông minh - Gemini AI Power</p>
+        </footer>
     </div>
-
-    <script>
-        const form = document.getElementById('uploadForm');
-        const fileInput = document.getElementById('fileInput');
-        const dropArea = document.getElementById('dropArea');
-        const preview = document.getElementById('preview');
-        const loading = document.getElementById('loading');
-        const resetBtn = document.getElementById('resetBtn');
-
-        // Click để chọn file
-        dropArea.addEventListener('click', () => fileInput.click());
-
-        // Drag & Drop
-        dropArea.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            dropArea.classList.add('dragover');
-        });
-        dropArea.addEventListener('dragleave', () => {
-            dropArea.classList.remove('dragover');
-        });
-        dropArea.addEventListener('drop', (e) => {
-            e.preventDefault();
-            dropArea.classList.remove('dragover');
-            fileInput.files = e.dataTransfer.files;
-            showPreview();
-        });
-
-        // Hiển thị preview khi chọn file
-        fileInput.addEventListener('change', showPreview);
-
-        function showPreview() {
-            preview.innerHTML = '';
-            if (!fileInput.files || fileInput.files.length === 0) return;
-
-            const file = fileInput.files[0];
-            const fileType = file.type;
-
-            const fileName = document.createElement('p');
-            fileName.className = 'file-name';
-            fileName.textContent = `File: ${file.name}`;
-            preview.appendChild(fileName);
-
-            if (fileType.startsWith('image/')) {
-                const img = document.createElement('img');
-                img.src = URL.createObjectURL(file);
-                preview.appendChild(img);
-            } else if (fileType === 'application/pdf') {
-                const icon = document.createElement('div');
-                icon.className = 'pdf-icon';
-                icon.innerHTML = '📄';
-                preview.appendChild(icon);
-                const pdfMsg = document.createElement('p');
-                pdfMsg.textContent = 'PDF - Preview trang đầu (nâng cao nếu cần pdf.js)';
-                preview.appendChild(pdfMsg);
-            }
-        }
-
-        // Submit form (AJAX)
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            if (!fileInput.files || fileInput.files.length === 0) {
-                alert('Vui lòng chọn file!');
-                return;
-            }
-
-            loading.style.display = 'block';
-            const formData = new FormData(form);
-
-            try {
-                const response = await fetch('/upload', {
-                    method: 'POST',
-                    body: formData
-                });
-
-                if (!response.ok) {
-                    const err = await response.json();
-                    alert('Lỗi: ' + (err.error || 'Xử lý thất bại'));
-                } else {
-                    // Tự động tải file .docx
-                    const blob = await response.blob();
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = response.headers.get('Content-Disposition')?.split('filename=')[1]?.replace(/"/g, '') || 'KetQua_OCR.docx';
-                    document.body.appendChild(a);
-                    a.click();
-                    a.remove();
-                    window.URL.revokeObjectURL(url);
-                }
-            } catch (err) {
-                alert('Lỗi kết nối: ' + err.message);
-            } finally {
-                loading.style.display = 'none';
-            }
-        });
-
-        // Reset
-        resetBtn.addEventListener('click', () => {
-            form.reset();
-            preview.innerHTML = '';
-        });
-    </script>
 </body>
 </html>
