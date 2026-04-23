@@ -2,61 +2,89 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hệ thống OCR & Dublin Core Metadata</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <title>OCR XEON PRO v7.5</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background: #f8f9fa; padding: 30px; }
+        .main-card { border-radius: 15px; border: none; box-shadow: 0 10px 25px rgba(0,0,0,0.05); }
+        .label-dc { font-size: 0.7rem; font-weight: bold; color: #888; text-transform: uppercase; }
+        #result { font-family: 'Courier New', monospace; font-size: 0.9rem; background: #fff; }
+    </style>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>📜 Số hóa Tài liệu</h1>
-            <p>Trích xuất nội dung bằng AI & Quản lý theo chuẩn Dublin Core</p>
-        </header>
+<div class="container">
+    <div class="card main-card p-4">
+        <h3 class="text-center text-primary fw-bold mb-4">🚀 OCR XEON PRO - CLOUDFLARE SAFE</h3>
+        
+        <div id="upload-box" class="input-group mb-4">
+            <input type="file" id="file" class="form-control">
+            <button class="btn btn-primary fw-bold" onclick="upload()">BẮT ĐẦU SỐ HÓA</button>
+        </div>
 
-        <form action="/upload" method="POST" enctype="multipart/form-data" class="ocr-form">
-            <div class="form-grid">
-                <div class="input-group">
-                    <label>Tiêu đề (dc.title) *</label>
-                    <input type="text" name="title" placeholder="Tên sách hoặc tài liệu..." required>
-                </div>
+        <div class="progress mb-2 d-none" id="prog-node">
+            <div id="bar" class="progress-bar progress-bar-striped progress-bar-animated" style="width: 0%">0%</div>
+        </div>
+        <p id="msg" class="text-center text-muted fw-bold small"></p>
 
-                <div class="input-group">
-                    <label>Tác giả (dc.creator)</label>
-                    <input type="text" name="creator" placeholder="Tên tác giả, tổ chức...">
-                </div>
+        <textarea id="result" class="form-control mb-4" rows="8" readonly placeholder="Kết quả phục chế hiện ở đây..."></textarea>
 
-                <div class="input-group">
-                    <label>Chủ đề (dc.subject)</label>
-                    <input type="text" name="subject" placeholder="Từ khóa, lĩnh vực...">
-                </div>
-
-                <div class="input-group">
-                    <label>Nhà xuất bản (dc.publisher)</label>
-                    <input type="text" name="publisher" placeholder="Nơi phát hành...">
-                </div>
-
-                <div class="input-group full-width">
-                    <label>Nguồn gốc (dc.source)</label>
-                    <input type="text" name="source" placeholder="Link web hoặc nguồn tài liệu gốc...">
-                </div>
-
-                <div class="input-group full-width">
-                    <label>Chọn tệp tin (PDF, JPG, PNG) *</label>
-                    <div class="file-upload">
-                        <input type="file" name="file" id="file" required>
-                    </div>
-                </div>
+        <div id="edit-box" class="d-none border-top pt-4">
+            <h6 class="fw-bold text-success mb-3">🛠️ Kiểm tra 15 trường Metadata Dublin Core:</h6>
+            <div id="meta-fields" class="row g-2 mb-4"></div>
+            <div class="row g-2">
+                <div class="col-md-6"><button class="btn btn-outline-secondary w-100" onclick="location.reload()">HỦY & RESET</button></div>
+                <div class="col-md-6"><button class="btn btn-success w-100 shadow fw-bold" onclick="save()">XÁC NHẬN & TẢI WORD</button></div>
             </div>
-
-            <button type="submit" class="btn-submit">
-                <span>🚀 Bắt đầu xử lý AI</span>
-            </button>
-        </form>
-
-        <footer>
-            <p>&copy; 2026 - Hệ thống OCR thông minh - Gemini AI Power</p>
-        </footer>
+        </div>
     </div>
+</div>
+
+<script>
+let tid = null;
+const dc = ['title', 'creator', 'subject', 'description', 'publisher', 'contributor', 'date', 'type', 'format', 'identifier', 'source', 'language', 'relation', 'coverage', 'rights'];
+
+function upload() {
+    let f = document.getElementById("file").files[0];
+    if(!f) return alert("Chọn file đệ ơi!");
+    let fd = new FormData(); fd.append("file", f);
+    document.getElementById("prog-node").classList.remove("d-none");
+    document.getElementById("upload-box").classList.add("d-none");
+    fetch("/process", { method: "POST", body: fd }).then(r => r.json()).then(d => { tid = d.task_id; poll(); });
+}
+
+function poll() {
+    fetch(`/status/${tid}`).then(r => r.json()).then(d => {
+        if(d.total > 0) {
+            let p = Math.round((d.progress / d.total) * 100);
+            document.getElementById("bar").style.width = p + "%";
+            document.getElementById("bar").innerText = p + "%";
+        }
+        document.getElementById("msg").innerText = d.status;
+        if(d.partial) document.getElementById("result").value = d.partial;
+        if(d.status === "SUCCESS") { showForm(d.metadata); return; }
+        // HEARTBEAT 30 GIÂY
+        setTimeout(poll, 30000);
+    });
+}
+
+function showForm(meta) {
+    document.getElementById("edit-box").classList.remove("d-none");
+    let html = "";
+    dc.forEach(f => {
+        html += `<div class="col-md-4"><label class="label-dc">${f}</label><input type="text" id="inp-${f}" class="form-control form-control-sm" value="${meta[f] || ''}"></div>`;
+    });
+    document.getElementById("meta-fields").innerHTML = html;
+}
+
+function save() {
+    let meta = {}; dc.forEach(f => meta[f] = document.getElementById(`inp-${f}`).value);
+    fetch("/finalize", {
+        method: "POST", headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ task_id: tid, metadata: meta })
+    }).then(r => r.json()).then(d => {
+        if(d.success) { window.location.href = d.download; alert("Thành công! Đang reset..."); location.reload(); }
+    });
+}
+</script>
 </body>
 </html>
